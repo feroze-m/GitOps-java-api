@@ -1,0 +1,60 @@
+name: Maven Build and Deploy
+description: Build and deploy a Maven project
+author: 'feroze-m'
+inputs:
+  deploy:
+    description: 'Whether to deploy the project'
+    required: true
+    default: true
+
+runs:
+  using: 'composite'
+  steps:
+
+  - name: Set up JDK 17 and Maven cache
+    uses: actions/setup-java@v2
+    with:
+      distribution: 'temurin'            
+      java-version: '17'
+      cache: 'maven'
+
+  - name: Set up Maven 3.9.9 if not already installed
+    run: |
+      mvn -v
+      if [ $? -eq 0 ]; then
+        echo "Maven is already installed"
+        exit 0
+      fi
+      else
+        echo "Setting up Maven"
+        wget -q https://downloads.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+        tar xzf apache-maven-3.9.9-bin.tar.gz
+        export M2_HOME=$PWD/apache-maven-3.9.9
+        export PATH=$M2_HOME/bin:$PATH
+        mvn -v
+      fi
+
+  - name: Build with Maven
+    run: |
+      echo "Building the project with Maven using the pom.xml file"
+      mvn -B package --file pom.xml
+
+  - name: Set up Maven settings.xml
+    if: ${{ inputs.deploy }}
+    run: |
+      mkdir -p $HOME/.m2
+      echo "<settings><servers><server><id>registry</id><username>\${env.MAVEN_USERNAME}</username><password>\${env.MAVEN_PASSWORD}</password></server></servers></settings>" > $HOME/.m2/settings.xml
+
+  - name: Deploy with Maven
+    if: ${{ inputs.deploy }}
+    env:
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+    run: |
+      mvn deploy --file pom.xml
+
+  - name: Upload the JAR file as an artifact
+    if: ${{ inputs.deploy }}
+    uses: actions/upload-artifact@v4
+    with:
+      name: ${{ github.repository }}-${{ github.sha }}.jar
